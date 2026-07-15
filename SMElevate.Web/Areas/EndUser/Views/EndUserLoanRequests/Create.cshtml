@@ -1,0 +1,428 @@
+@model SMElevate.Web.Areas.EndUser.ViewModels.LoanRequestCreateViewModel
+@section HeaderActions {
+  <a asp-area="EndUser" asp-controller="EndUserLoanRequests" asp-action="MyApplications" class="btn btn-2">My Applications</a>
+}
+
+@* ── Scheme selector ──────────────────────────────────────────────────────── *@
+<div class="card mb-3">
+  <div class="card-header">
+    <h3 class="card-title">
+      <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none"
+           stroke="currentColor" stroke-width="2" class="icon me-2">
+        <rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/>
+      </svg>
+      Select Scheme
+    </h3>
+  </div>
+  <div class="card-body">
+    <div class="row align-items-end g-3">
+      <div class="col-md-6">
+        <label class="form-label required">Financing Scheme</label>
+        <select id="scheme-select" class="form-select" onchange="onSchemeChange(this.value)">
+          <option value="">— Select a scheme to begin —</option>
+          @foreach (var s in Model.Schemes)
+          {
+            <option value="@s.Id">@s.SchemeName</option>
+          }
+        </select>
+      </div>
+      <div class="col-auto">
+        <div id="scheme-status" class="text-secondary small"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+@* ── Error ────────────────────────────────────────────────────────────────── *@
+<div id="form-message" class="alert alert-important alert-danger d-none" role="alert"></div>
+@if (TempData["Error"] is string errMsg)
+{
+  <div class="alert alert-danger alert-dismissible">
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    @errMsg
+  </div>
+}
+
+@* ── Dynamic form ─────────────────────────────────────────────────────────── *@
+<div id="dynamic-form-area"></div>
+
+@* ── Hidden POST form ─────────────────────────────────────────────────────── *@
+<form id="loan-request-form" method="post"
+      asp-area="EndUser" asp-controller="EndUserLoanRequests" asp-action="Create"
+      asp-antiforgery="true" autocomplete="off" novalidate>
+  @Html.AntiForgeryToken()
+  <input type="hidden" name="SchemeId"        id="h-scheme-id" />
+  <input type="hidden" name="SchemeFormId"    id="h-form-id" value="" />
+  <input type="hidden" name="FieldValuesJson" id="h-field-values" />
+  <div id="shareholder-hidden-fields"></div>
+</form>
+
+@* ── Shareholder row template ─────────────────────────────────────────────── *@
+<template id="sh-row-template">
+  <div class="row shareholder-row align-items-end mb-2">
+    <div class="col-md-3 mb-2">
+      <label class="form-label required">Name</label>
+      <input type="text" class="form-control sh-name" />
+    </div>
+    <div class="col-md-2 mb-2">
+      <label class="form-label required">Contact No.</label>
+      <input type="text" class="form-control sh-contact" placeholder="03xxxxxxxxx" />
+    </div>
+    <div class="col-md-3 mb-2">
+      <label class="form-label required">Email</label>
+      <input type="email" class="form-control sh-email" />
+    </div>
+    <div class="col-md-2 mb-2">
+      <label class="form-label required">CNIC</label>
+      <input type="text" class="form-control sh-cnic" placeholder="xxxxx-xxxxxxx-x" />
+    </div>
+    <div class="col-md-1 mb-2">
+      <label class="form-label required">Share %</label>
+      <input type="number" min="0" max="100" class="form-control sh-share" />
+    </div>
+    <div class="col-md-1 mb-2">
+      <button type="button" class="btn btn-icon btn-outline-danger btn-remove-sh" aria-label="Remove">
+        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none"
+             stroke="currentColor" stroke-width="2" class="icon">
+          <path d="M4 7l16 0"/><path d="M10 11l0 6"/><path d="M14 11l0 6"/>
+          <path d="M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2 -2l1 -12"/>
+          <path d="M9 7v-3a1 1 0 0 1 1 -1h4a1 1 0 0 1 1 1v3"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+</template>
+
+@section Scripts {
+<script>
+(function () {
+  var currentForm = null;  // { schemeId, fields, banks }
+  var msgBox  = document.getElementById('form-message');
+  var dynArea = document.getElementById('dynamic-form-area');
+
+  function showErr(msg) {
+    msgBox.textContent = msg;
+    msgBox.classList.remove('d-none');
+    msgBox.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+  function clearErr() { msgBox.classList.add('d-none'); }
+
+  // ── Scheme change ─────────────────────────────────────────────────────────
+  window.onSchemeChange = function (schemeId) {
+    var statusEl = document.getElementById('scheme-status');
+    dynArea.innerHTML = '';
+    currentForm = null;
+    clearErr();
+    if (!schemeId) { statusEl.textContent = ''; return; }
+
+    statusEl.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span> Loading form…';
+
+    fetch('/EndUser/EndUserLoanRequests/GetFormForScheme?schemeId=' + schemeId)
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.error) {
+          statusEl.textContent = '';
+          dynArea.innerHTML = '<div class="alert alert-warning">' + escHtml(data.error) + '</div>';
+          return;
+        }
+        currentForm = data;
+        statusEl.innerHTML = '<span class="badge bg-green-lt">Form loaded</span>';
+        document.getElementById('h-scheme-id').value = schemeId;
+        renderDynamicForm(data);
+      })
+      .catch(function () {
+        statusEl.textContent = '';
+        dynArea.innerHTML = '<div class="alert alert-danger">Failed to load form. Please try again.</div>';
+      });
+  };
+
+  // ── Render ────────────────────────────────────────────────────────────────
+  function renderDynamicForm(data) {
+    var secs = groupBySections(data.fields);
+    var html = secs.map(function (sec) {
+      var fieldsHtml = sec.fields
+        .slice().sort(function (a, b) { return a.displayOrder - b.displayOrder; })
+        .map(function (f) { return renderFieldWrap(f, data.banks); }).join('');
+      return '<div class="card mb-3" data-section="' + escAttr(sec.name) + '">'
+        + '<div class="card-header"><h3 class="card-title">' + escHtml(sec.name) + '</h3></div>'
+        + '<div class="card-body"><div class="row g-3">' + fieldsHtml + '</div></div>'
+        + '</div>';
+    }).join('');
+
+    html += '<div class="card mb-3"><div class="card-footer text-end">'
+      + '<button type="button" class="btn btn-primary" onclick="submitDynamicForm()">'
+      + '<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="icon me-1"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M5 13v-8a2 2 0 0 1 2 -2h7l5 5v11a2 2 0 0 1 -2 2h-7.5"/><path d="M9 13l2 2l4 -4"/></svg>'
+      + ' Submit Application</button>'
+      + '</div></div>';
+
+    dynArea.innerHTML = html;
+
+    applyConditionalSetup(data.fields);
+    addShareholderRow();
+  }
+
+  function groupBySections(fields) {
+    var m = {};
+    fields.forEach(function (f) {
+      if (!m[f.sectionName])
+        m[f.sectionName] = { name: f.sectionName, order: f.sectionOrder, fields: [] };
+      m[f.sectionName].fields.push(f);
+    });
+    return Object.values(m).sort(function (a, b) { return a.order - b.order; });
+  }
+
+  function renderFieldWrap(f, banks) {
+    var colClass = 'col-md-4';
+    if (f.fieldType === 'textarea' || f.fieldType === 'shareholder_group') colClass = 'col-md-12';
+
+    var inner = '';
+    if (f.fieldType === 'shareholder_group') {
+      inner = '<div class="d-flex align-items-center mb-3">'
+        + '<h4 class="mb-0">' + escHtml(f.fieldLabel) + '</h4>'
+        + '<button type="button" class="btn btn-sm btn-outline-primary ms-auto" onclick="addShareholderRow()">+ Add Shareholder</button>'
+        + '</div><div id="sh-rows-container"></div>';
+    } else {
+      var reqClass = f.isRequired ? ' required' : '';
+      inner = '<label class="form-label' + reqClass + '">' + escHtml(f.fieldLabel) + '</label>'
+        + renderFieldInput(f, banks);
+    }
+
+    // Fields hidden by conditional visibility start with d-none
+    var hiddenClass = f.hasConditionalVisibility ? ' d-none' : '';
+    return '<div class="' + colClass + hiddenClass + '" data-field="' + escAttr(f.fieldName) + '">' + inner + '</div>';
+  }
+
+  function renderFieldInput(f, banks) {
+    var name = escAttr(f.fieldName);
+    var req  = f.isRequired ? ' required' : '';
+
+    switch (f.fieldType) {
+      case 'text':
+        return '<input type="text" name="' + name + '" class="form-control dyn-field"' + req + ' />';
+      case 'number':
+        return '<input type="number" name="' + name + '" class="form-control dyn-field"' + req + ' />';
+      case 'textarea':
+        return '<textarea name="' + name + '" class="form-control dyn-field" rows="3"' + req + '></textarea>';
+      case 'select':
+        return '<select name="' + name + '" class="form-select dyn-field"' + req + '>'
+          + '<option value="">— Select —</option>'
+          + (f.options || []).map(function (o) { return '<option value="' + escAttr(o) + '">' + escHtml(o) + '</option>'; }).join('')
+          + '</select>';
+      case 'radio':
+        return (f.options || []).map(function (o) {
+          return '<label class="form-check form-check-inline">'
+            + '<input class="form-check-input dyn-field" type="radio" name="' + name + '" value="' + escAttr(o) + '"' + req + ' />'
+            + '<span class="form-check-label">' + escHtml(o) + '</span></label>';
+        }).join('');
+      case 'checkbox':
+        return (f.options || []).map(function (o) {
+          return '<label class="form-check">'
+            + '<input class="form-check-input dyn-field" type="checkbox" name="' + name + '" value="' + escAttr(o) + '" />'
+            + '<span class="form-check-label">' + escHtml(o) + '</span></label>';
+        }).join('');
+      case 'bank_select':
+        return '<select name="AssignedBankId" class="form-select dyn-field"' + req + '>'
+          + '<option value="">— Select bank —</option>'
+          + (banks || []).map(function (b) { return '<option value="' + escAttr(String(b.id)) + '">' + escHtml(b.name) + '</option>'; }).join('')
+          + '</select>';
+      default:
+        return '<input type="text" name="' + name + '" class="form-control dyn-field"' + req + ' />';
+    }
+  }
+
+  // ── Conditional logic ─────────────────────────────────────────────────────
+  // Parses "FieldName = Value" or "FieldName != Value"
+  function parseCondExpr(expr) {
+    if (!expr) return null;
+    var ne = expr.indexOf('!=');
+    if (ne >= 0) return { field: expr.slice(0, ne).trim(), op: '!=', value: expr.slice(ne + 2).trim() };
+    var eq = expr.indexOf('=');
+    if (eq >= 0) return { field: expr.slice(0, eq).trim(), op: '=', value: expr.slice(eq + 1).trim() };
+    return null;
+  }
+
+  function evaluateCondExpr(cond, fieldVal) {
+    if (!cond) return false;
+    if (cond.op === '=')  return fieldVal === cond.value;
+    if (cond.op === '!=') return fieldVal !== cond.value;
+    return false;
+  }
+
+  function applyConditionalSetup(fields) {
+    // Build a map: sourceFieldName → list of target field names + parsed conditions
+    var condMap = {};
+    fields.forEach(function (f) {
+      if (!f.hasConditionalVisibility || !f.conditionalExpression) return;
+      var parsed = parseCondExpr(f.conditionalExpression);
+      if (!parsed) return;
+      if (!condMap[parsed.field]) condMap[parsed.field] = [];
+      condMap[parsed.field].push({ targetField: f.fieldName, cond: parsed });
+    });
+
+    // Wire change events on source fields
+    Object.keys(condMap).forEach(function (srcField) {
+      dynArea.querySelectorAll('[name="' + srcField + '"]').forEach(function (el) {
+        el.addEventListener('change', function () { applyConditions(condMap); });
+        el.addEventListener('input',  function () { applyConditions(condMap); });
+      });
+    });
+
+    // Initial pass
+    applyConditions(condMap);
+  }
+
+  function applyConditions(condMap) {
+    Object.keys(condMap).forEach(function (srcField) {
+      var fieldVal = getFieldValue(srcField);
+      condMap[srcField].forEach(function (entry) {
+        var met = evaluateCondExpr(entry.cond, fieldVal);
+        var wrap = dynArea.querySelector('[data-field="' + entry.targetField + '"]');
+        if (wrap) {
+          if (met) wrap.classList.remove('d-none');
+          else     wrap.classList.add('d-none');
+        }
+      });
+    });
+  }
+
+  function getFieldValue(fn) {
+    var radio = dynArea.querySelector('[name="' + fn + '"]:checked');
+    if (radio) return radio.value;
+    var el = dynArea.querySelector('[name="' + fn + '"]');
+    return el ? el.value : '';
+  }
+
+  // ── Shareholder ───────────────────────────────────────────────────────────
+  window.addShareholderRow = function () {
+    var c = document.getElementById('sh-rows-container');
+    if (!c) return;
+    var frag = document.getElementById('sh-row-template').content.cloneNode(true);
+    frag.querySelector('.btn-remove-sh').addEventListener('click', function (e) {
+      var rows = c.querySelectorAll('.shareholder-row');
+      if (rows.length <= 1) return;
+      e.target.closest('.shareholder-row').remove();
+    });
+    c.appendChild(frag);
+  };
+
+  function getShareholders() {
+    var c = document.getElementById('sh-rows-container');
+    if (!c) return [];
+    return Array.from(c.querySelectorAll('.shareholder-row')).map(function (row) {
+      return {
+        name:    (row.querySelector('.sh-name')    || {}).value || '',
+        contact: (row.querySelector('.sh-contact') || {}).value || '',
+        email:   (row.querySelector('.sh-email')   || {}).value || '',
+        cnic:    (row.querySelector('.sh-cnic')    || {}).value || '',
+        share:   (row.querySelector('.sh-share')   || {}).value || ''
+      };
+    });
+  }
+
+  // ── Collect field values ──────────────────────────────────────────────────
+  function collectFieldValues() {
+    if (!currentForm) return [];
+    var values = [];
+    currentForm.fields.forEach(function (f) {
+      if (f.fieldType === 'shareholder_group') return;
+      if (f.fieldType === 'checkbox') {
+        var checked = Array.from(dynArea.querySelectorAll('[name="' + f.fieldName + '"]:checked'))
+          .map(function (el) { return el.value; });
+        values.push({ fieldName: f.fieldName, fieldValue: checked.join(',') });
+      } else if (f.fieldType === 'radio') {
+        var r = dynArea.querySelector('[name="' + f.fieldName + '"]:checked');
+        values.push({ fieldName: f.fieldName, fieldValue: r ? r.value : '' });
+      } else if (f.fieldType === 'bank_select') {
+        var bel = dynArea.querySelector('[name="AssignedBankId"]');
+        values.push({ fieldName: 'AssignedBankId', fieldValue: bel ? bel.value : '' });
+      } else {
+        var el = dynArea.querySelector('[name="' + f.fieldName + '"]');
+        values.push({ fieldName: f.fieldName, fieldValue: el ? el.value : '' });
+      }
+    });
+    return values;
+  }
+
+  // ── Validation ────────────────────────────────────────────────────────────
+  function isValidEmail(v) {
+    var at = String.fromCharCode(64);
+    var i  = (v || '').indexOf(at);
+    if (i <= 0) return false;
+    var rest = v.slice(i + 1);
+    return rest.indexOf('.') > 0 && rest.length > 2;
+  }
+  function isValidCNIC(v) { return /^\d{5}-\d{7}-\d$/.test(v || ''); }
+
+  function validateForm() {
+    if (!currentForm) { showErr('Please select a scheme first.'); return false; }
+
+    for (var i = 0; i < currentForm.fields.length; i++) {
+      var f = currentForm.fields[i];
+      if (!f.isRequired || f.fieldType === 'shareholder_group') continue;
+
+      // Skip hidden (conditional) fields
+      var wrap = dynArea.querySelector('[data-field="' + f.fieldName + '"]');
+      if (wrap && wrap.classList.contains('d-none')) continue;
+      var secCard = wrap && wrap.closest('[data-section]');
+      if (secCard && secCard.classList.contains('d-none')) continue;
+
+      var val = '';
+      if (f.fieldType === 'radio') {
+        var r = dynArea.querySelector('[name="' + f.fieldName + '"]:checked');
+        val = r ? r.value : '';
+      } else if (f.fieldType === 'bank_select') {
+        var bel = dynArea.querySelector('[name="AssignedBankId"]');
+        val = bel ? bel.value : '';
+      } else {
+        var el = dynArea.querySelector('[name="' + f.fieldName + '"]');
+        val = el ? el.value.trim() : '';
+      }
+      if (!val) { showErr('Please complete: ' + f.fieldLabel); return false; }
+    }
+
+    var shs = getShareholders();
+    for (var j = 0; j < shs.length; j++) {
+      var sh = shs[j];
+      if (!sh.name && !sh.contact && !sh.email && !sh.cnic && !sh.share) continue;
+      if (!sh.name || !sh.contact || !sh.email || !sh.cnic || !sh.share) {
+        showErr('Please complete all fields for each shareholder row.'); return false;
+      }
+      if (!isValidEmail(sh.email)) { showErr('Invalid email for shareholder: ' + sh.name); return false; }
+      if (!isValidCNIC(sh.cnic))   { showErr('Invalid CNIC for shareholder: ' + sh.name); return false; }
+      if (isNaN(sh.share) || +sh.share < 0 || +sh.share > 100) {
+        showErr('Share % for ' + sh.name + ' must be 0–100'); return false;
+      }
+    }
+
+    clearErr();
+    return true;
+  }
+
+  // ── Submit ────────────────────────────────────────────────────────────────
+  window.submitDynamicForm = function () {
+    if (!validateForm()) return;
+
+    document.getElementById('h-field-values').value = JSON.stringify(collectFieldValues());
+
+    var shs = getShareholders().filter(function (sh) { return !!sh.name; });
+    var hc  = document.getElementById('shareholder-hidden-fields');
+    hc.innerHTML = '';
+    shs.forEach(function (sh, idx) {
+      function add(prop, val) {
+        var inp = document.createElement('input');
+        inp.type = 'hidden'; inp.name = 'Shareholders[' + idx + '].' + prop; inp.value = val;
+        hc.appendChild(inp);
+      }
+      add('Name', sh.name); add('ContactNo', sh.contact); add('Email', sh.email);
+      add('CNIC', sh.cnic); add('ShareholdingPercentage', sh.share);
+    });
+
+    document.getElementById('loan-request-form').submit();
+  };
+
+  function escHtml(s)  { return String(s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+  function escAttr(s)  { return String(s || '').replace(/"/g, '&quot;'); }
+
+})();
+</script>
+}

@@ -1,0 +1,31 @@
+Summary
+Here's what was implemented for the final backend phase:
+
+Project: SMElevate.Web (ASP.NET Core 10 MVC)
+Database: SMElevate-v2 on .\SQLEXPRESS (SQL Server 2025)
+Auth: Cookie authentication, role-based policies (AdminOnly, BankOnly, EndUserOnly)
+
+What was built:
+Data Layer
+
+20-table schema: Users, Roles, Banks, BankMembers, EndUserProfiles, LoanRequests + Shareholders + StatusHistory + Attachments, Schemes + SchemeForms + FormFields, MasterLookups + Values, AppNotifications, EmailTemplates, EmailLogs, SystemSettings, AuditLogs
+EF Core migration InitialCreate_SMElevateV2 — applied to live SQL Server
+DataSeeder: admin user (admin@smeelevate.local / Admin@12345), 4 default roles, 8 lookup groups (Status, Tenor, Business Nature, Facility Type…), 14 email templates, 21 system settings, demo bank + bank user (bank.user@example.com) + demo EndUser (enduser@example.com / EndUser@12345)
+15 Service Interfaces + Implementations: Auth, OTP (memory-cache), User, Role, Bank, LoanRequest, Notification, Email (MailKit SMTP, logs failed sends to EmailLog), EmailTemplate, Lookup, Scheme, Audit, FileUpload, RequestNumber (thread-safe SME-YYYYMMDD-XXXXXX), Settings
+
+Admin Area — sidebar layout (layout-fluid-vertical pattern): login, dashboard with real DB stats + ApexCharts, Users CRUD + activate/deactivate, Roles CRUD, Banks CRUD + member assignment, Schemes CRUD + publish/unpublish, Form Builder (JSON-based), Master Lookups CRUD + values management, Settings (4-tab: Email/Notification/OAuth/General)
+
+Banks Area — OTP email flow login (email → OTP generated + logged to EmailLog → VerifyOtp), dashboard scoped to assigned bank requests, Assigned/Approved/Rejected request lists, full Request Detail with all readonly EndUser fields + editable Bank Decision section (status, remarks, attachment upload), Bank Profile
+
+EndUser Area — Login + Register, OAuth placeholder callbacks, Profile Completion → token verification (emailed + saved to DB), Dashboard with real counts + notifications, Loan Request Create (multi-section form, dynamic shareholders, bank selection, IBAN/RAAST), Confirmation page with unique RequestNo, Application Detail with status history, Notifications list + mark-read
+
+Cross-cutting: Email sends trigger EmailLog records (Sent/Failed), all key actions write AuditLog entries, AppNotification records created on loan submission + status changes, file uploads stored under wwwroot/uploads
+
+Cleanup: 379 unused Tabler demo .html pages removed from Admin/, Banks/, EndUser/ — only the 42 SMElevate-built static prototype pages remain alongside the new MVC project (SMElevate.Web/)
+
+Connection string: Server=.\SQLEXPRESS;Database=SMElevate-v2;Trusted_Connection=True;TrustServerCertificate=True;MultipleActiveResultSets=true
+
+To run: cd SMElevate.Web && dotnet run --urls "http://localhost:5000" — database migrates and seeds on first start automatically.
+
+
+App Password Gmail: uypxovkzbowvygtw
