@@ -1,0 +1,47 @@
+
+        html,body{height:100%;margin:0}
+        .login-left{
+            background:#0b5d36;
+            color:#fff;
+            min-height:100vh;
+            padding:60px;
+            display:flex;
+            flex-direction:column;
+            justify-content:space-between;
+        }
+        .portal{color:#7EE081;font-size:13px;font-weight:600}
+        .hero h1{font-size:48px;font-weight:700;line-height:1.2}
+        .hero span{color:#7EE081}
+        .divider{width:80px;height:4px;background:#7EE081;border-radius:4px;margin:24px 0}
+        .feature{margin-bottom:22px}
+        .feature strong{display:block}
+        .feature small{color:#d9e5dc}
+        .login-wrapper{
+            min-height:100vh;
+            display:flex;
+            align-items:center;
+            justify-content:center;
+            padding:40px;
+        }
+        .login-card{
+            width:100%;
+            max-width:560px;
+            border-radius:20px;
+            padding:40px;
+            box-shadow:0 10px 35px rgba(0,0,0,.08);
+            background:#fff;
+        }
+        .form-control{border-radius:12px}
+        .btn-success{
+    background:#0B6B3A !important;
+    border:none;
+    border-radius:14px;
+    height:58px;
+    font-size:20px;
+    font-weight:600;
+}.form-control{
+    height:56px;
+    border-radius:14px;
+    border:1px solid #ddd;
+}
+    
