@@ -1,0 +1,33 @@
+name: SMElevate Build
+
+on:
+  push:
+    branches:
+      - main
+      - develop
+      - feature/**
+
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+
+    steps:
+
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Restore Packages
+        run: dotnet restore SMElevate.slnx
+
+      - name: Build Solution
+        run: dotnet build SMElevate.slnx --configuration Release --no-restore
